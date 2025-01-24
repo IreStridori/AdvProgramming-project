@@ -1,0 +1,102 @@
+Crea una directory chiamata templates/ e aggiungi i file HTML.
+
+index.html
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Genomic Analysis</title>
+</head>
+<body>
+    <h1>Upload a FASTA File</h1>
+    <form action="/upload" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".fasta">
+        <button type="submit">Upload</button>
+    </form>
+</body>
+</html>
+
+stats.html
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Sequence Statistics</title>
+</head>
+<body>
+    <h1>Sequence Statistics</h1>
+    <table border="1">
+        <tr>
+            <th>ID</th>
+            <th>Description</th>
+            <th>Length</th>
+            <th>GC Content</th>
+        </tr>
+        {% for stat in stats %}
+        <tr>
+            <td>{{ stat.ID }}</td>
+            <td>{{ stat.Description }}</td>
+            <td>{{ stat.Length }}</td>
+            <td>{{ stat['GC Content'] }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
+
+motif.html
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Motif Search</title>
+</head>
+<body>
+    <h1>Search for a Motif</h1>
+    <form method="post">
+        <input type="text" name="motif" placeholder="Enter motif">
+        <button type="submit">Search</button>
+    </form>
+    {% if results %}
+        <h2>Results for motif "{{ motif }}"</h2>
+        <ul>
+            {% for result in results %}
+                <li>Sequence {{ result['Sequence Index'] }}: {{ result['Motif Positions'] }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+</body>
+</html>
+
+align.html
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Sequence Alignment</title>
+</head>
+<body>
+    <h1>Align Sequences</h1>
+    <form method="post">
+        <label for="seq1">Sequence 1:</label>
+        <select name="seq1">
+            {% for i in range(fasta_data.shape[0]) %}
+            <option value="{{ i }}" {% if seq1_index == i %}selected{% endif %}>{{ i }}</option>
+            {% endfor %}
+        </select>
+        <label for="seq2">Sequence 2:</label>
+        <select name="seq2">
+            {% for i in range(fasta_data.shape[0]) %}
+            <option value="{{ i }}" {% if seq2_index == i %}selected{% endif %}>{{ i }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit">Align</button>
+    </form>
+    {% if alignment_result %}
+        <h2>Alignment Result</h2>
+        <pre>{{ alignment_result }}</pre>
+    {% endif %}
+</body>
+</html>
+
+Fammi sapere se hai bisogno di ulteriori dettagli o modifiche!
