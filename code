@@ -1,0 +1,173 @@
+from flask import Flask, request, render_template, redirect, url_for
+import pandas as pd
+from Bio import pairwise2
+
+# Importa le classi definite prima
+class DataParser(ABC):
+    @abstractmethod
+    def parse(self, file_path):
+        pass
+
+# Sottoclasse concreta per il parsing dei file FASTA
+class FastaParser(DataParser):
+    def parse(self, file_path):
+        data = {"ID": [], "Description": [], "Sequence": []}
+        with open(file_path, "r") as file:
+            current_id = None
+            current_description = None
+            current_sequence = []
+
+            for line in file:
+                if line.startswith(">"):
+                    if current_id:
+                        data["ID"].append(current_id)
+                        data["Description"].append(current_description)
+                        data["Sequence"].append("".join(current_sequence))
+                    header_parts = line[1:].strip().split(" ", 1)
+                    current_id = header_parts[0]
+                    current_description = header_parts[1] if len(header_parts) > 1 else ""
+                    current_sequence = []
+                else:
+                    current_sequence.append(line.strip())
+
+            if current_id:
+                data["ID"].append(current_id)
+                data["Description"].append(current_description)
+                data["Sequence"].append("".join(current_sequence))
+
+        return pd.DataFrame(data)
+
+class Sequence:
+    def __init__(self, sequence):
+        self.sequence = sequence
+
+    def length(self):
+        return len(self.sequence)
+
+class DNASequence(Sequence):
+    def gc_content(self):
+        gc_count = self.sequence.count("G") + self.sequence.count("C")
+        return (gc_count / len(self.sequence)) * 100 if self.sequence else 0.0
+
+class MotifAnalyser:
+    def __init__(self, sequences):
+        self.sequences = sequences
+
+    def search_motif(self, motif):
+        results = []
+        for idx in range(len(self.sequences)):  # Uso esplicito degli indici
+            seq = self.sequences[idx]
+            positions = []
+            start = 0
+            while (start := seq.find(motif, start)) != -1:
+                positions.append(start)
+                start += 1
+            results.append({"Sequence Index": idx, "Motif Positions": positions})
+        return results
+
+class SequenceAligner:
+    def __init__(self, seq1, seq2):
+        self.seq1 = seq1
+        self.seq2 = seq2
+
+    def align(self):
+        alignments = pairwise2.align.globalxx(self.seq1, self.seq2)
+        return alignments
+
+
+# Flask app
+app = Flask(__name__)
+
+# Variabili globali per i dati caricati
+uploaded_data_path = None
+fasta_data = None
+
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+@app.route("/upload", methods=["POST"])
+def upload():
+    global fasta_data, uploaded_data_path
+    file = request.files.get("file")
+    if not file:
+        return "No file uploaded!", 400
+
+    # Salva il file caricato in una posizione temporanea
+    uploaded_data_path = "uploaded_file.fasta"
+    file.save(uploaded_data_path)
+
+    parser = FastaParser()
+    fasta_data = parser.parse(uploaded_data_path)  # Parsing dal file salvato
+    return redirect(url_for("stats"))
+
+
+@app.route("/stats")
+def stats():
+    global fasta_data
+    if fasta_data is None:
+        return redirect(url_for("index"))
+
+    # Calcola statistiche per ogni sequenza
+    stats = []
+    for _, row in fasta_data.iterrows():
+        dna_seq = DNASequence(row["Sequence"])
+        stats.append({
+            "ID": row["ID"],
+            "Description": row["Description"],
+            "Length": dna_seq.length(),
+            "GC Content": f"{dna_seq.gc_content():.2f}%"
+        })
+
+    return render_template("stats.html", stats=stats)
+
+
+@app.route("/motif", methods=["GET", "POST"])
+def motif():
+    global fasta_data
+    if fasta_data is None:
+        return redirect(url_for("index"))
+
+    results = None
+    motif = None
+
+    if request.method == "POST":
+        motif = request.form.get("motif")
+        analyser = MotifAnalyser(fasta_data["Sequence"].tolist())
+        results = analyser.search_motif(motif)
+
+    return render_template("motif.html", results=results, motif=motif)
+
+
+@app.route("/align", methods=["GET", "POST"])
+def align():
+    global fasta_data
+    if fasta_data is None:
+        return redirect(url_for("index"))
+
+    alignment_result = None
+    seq1_index = None
+    seq2_index = None
+
+    if request.method == "POST":
+        seq1_index = int(request.form.get("seq1"))
+        seq2_index = int(request.form.get("seq2"))
+        seq1 = fasta_data.iloc[seq1_index]["Sequence"]
+        seq2 = fasta_data.iloc[seq2_index]["Sequence"]
+
+        aligner = SequenceAligner(seq1, seq2)
+        alignment_result = aligner.align()[0]  # Prendi il miglior allineamento
+
+    return render_template(
+        "align.html",
+        alignment_result=alignment_result,
+        fasta_data=fasta_data,
+        seq1_index=seq1_index,
+        seq2_index=seq2_index
+    )
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
